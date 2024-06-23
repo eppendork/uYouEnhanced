@@ -151,6 +151,12 @@
 "COPY_SETTINGS_DESC" = "Tüm mevcut ayarları panoya kopyala";
 "PASTE_SETTINGS" = "Ayarları Yapıştır";
 "PASTE_SETTINGS_DESC" = "Panodaki ayarları yapıştır ve uygula";
+"EXPORT_SETTINGS" = "Ayarları Dışa Aktar";
+"EXPORT_SETTINGS_DESC" = "Tüm mevcut ayarları bir .txt dosyasına dışa aktarır";
+"IMPORT_SETTINGS" = "Ayarları İçe Aktar";
+"IMPORT_SETTINGS_DESC" = "Ayarları içe aktarmak için basın (.txt)";
+"REPLACE_COPY_AND_PASTE_BUTTONS" = "'Ayarları Kopyala' ve 'Ayarları Yapıştır' Düğmelerini Değiştir";
+"REPLACE_COPY_AND_PASTE_BUTTONS_DESC" = "Düğmeleri 'Ayarları Dışa Aktar' ve 'Ayarları İçe Aktar' ile değiştirir";
 
 "UYOUENHANCED_ESSENTIAL_MENU" = "uYouEnhanced Temel Menü";
 "CHANGE_APP_ICON" = "Uygulama Simgesini Değiştir";
@@ -271,6 +277,7 @@
 "FAKE_PREMIUM_WARNING" = "You sekmesi v%@ 'de mevcut değil, sahte düğmeler oluşturulmayacak.\nAncak, *Sahte Premium Logosu* hala çalışacaktır.";
 "FAKE_YOUR_PREMIUM_BENEFITS" = "Premium faydalarınız";
 "FAKE_DOWNLOADS" = "İndirmeler";
+"DISABLE_ANIMATED_YOUTUBE_LOGO" = "Animasyonlu YouTube Logosunu Devre Dışı Bırak";
 "CENTER_YOUTUBE_LOGO" = "YouTube Logosunu Ortala";
 "CENTER_YOUTUBE_LOGO_DESC" = "Resmi YouTube Logosunu ortalamak için bu seçeneği açın. Uygulama yeniden başlatılması gereklidir.";
 "HIDE_YOUTUBE_LOGO" = "YouTube Logosunu Gizle";
@@ -287,6 +294,8 @@
 "HIDE_INDICATORS_DESC" = "Tüm göstergeleri gizler. (örneğin: Aşağı kaydırma, Yukarı Kaydırma, Kaydırma Durumu)";
 "FIX_CASTING" = "Dökümü Düzelt";
 "FIX_CASTING_DESC" = "Dökümü düzeltmek için belirli A/B bayraklarını değiştirir.";
+"NEW_SETTINGS_UI" = "Yeni Ayarlar Arayüzünü Kullan";
+"NEW_SETTINGS_UI_DESC" = "İnce ayar(Tweak) kategorileriyle yeni Ayarlar Arayüzünü etkinleştirir.";
 
 "DEFAULT" = "Varsayılan";
 "CUSTOM_COLOR" = "Özel Renk";
