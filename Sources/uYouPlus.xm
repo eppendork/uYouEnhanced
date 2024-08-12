@@ -53,6 +53,23 @@ NSBundle *tweakBundle = uYouPlusBundle();
 }
 %end
 
+// Fix App Group Directory by move it to document directory
+%hook NSFileManager
+- (NSURL *)containerURLForSecurityApplicationGroupIdentifier:(NSString *)groupIdentifier {
+    if (groupIdentifier != nil) {
+        NSArray *paths = [[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask];
+        NSURL *documentsURL = [paths lastObject];
+        return [documentsURL URLByAppendingPathComponent:@"AppGroup"];
+    }
+    return %orig(groupIdentifier);
+}
+%end
+
+// Remove App Rating Prompt in YouTube (for Sideloaded - iOS 14+) - @arichornlover
+%hook SKStoreReviewController
++ (void)requestReview { }
+%end
+
 // Enable Alternate Icons - @arichornlover
 %hook UIApplication
 - (BOOL)supportsAlternateIcons {
@@ -88,6 +105,14 @@ NSBundle *tweakBundle = uYouPlusBundle();
 - (void)decorateContext:(id)context { %orig(nil); }
 %end
 
+%hook YTLocalPlaybackController
+- (id)createAdsPlaybackCoordinator { return nil; }
+%end
+
+%hook MDXSession
+- (void)adPlaying:(id)ad {}
+%end
+
 %hook YTReelInfinitePlaybackDataSource
 - (void)setReels:(NSMutableOrderedSet <YTReelModel *> *)reels {
     [reels removeObjectsAtIndexes:[reels indexesOfObjectsPassingTest:^BOOL(YTReelModel *obj, NSUInteger idx, BOOL *stop) {
@@ -121,6 +146,12 @@ NSBundle *tweakBundle = uYouPlusBundle();
 %hook YTAccountScopedAdsInnerTubeContextDecorator
 - (void)decorateContext:(id)context { %orig(nil); }
 %end
+%hook YTLocalPlaybackController
+- (id)createAdsPlaybackCoordinator { return nil; }
+%end
+%hook MDXSession
+- (void)adPlaying:(id)ad {}
+%end
 %hook YTReelInfinitePlaybackDataSource
 - (void)setReels:(NSMutableOrderedSet <YTReelModel *> *)reels {
     [reels removeObjectsAtIndexes:[reels indexesOfObjectsPassingTest:^BOOL(YTReelModel *obj, NSUInteger idx, BOOL *stop) {
@@ -129,101 +160,84 @@ NSBundle *tweakBundle = uYouPlusBundle();
     %orig;
 }
 %end
-BOOL isAdString(NSString *description) {
-    if ([description containsString:@"brand_promo"]
-        || [description containsString:@"carousel_footered_layout"]
-        || [description containsString:@"carousel_headered_layout"]
-        || [description containsString:@"feed_ad_metadata"]
-        || [description containsString:@"full_width_portrait_image_layout"]
-        || [description containsString:@"full_width_square_image_layout"]
-        || [description containsString:@"home_video_with_context"]
-        || [description containsString:@"landscape_image_wide_button_layout"]
-        || [description containsString:@"post_shelf"]
-        || [description containsString:@"product_carousel"]
-        || [description containsString:@"product_engagement_panel"]
-        || [description containsString:@"product_item"]
-        || [description containsString:@"shelf_header"]
-        || [description containsString:@"statement_banner"]
-        || [description containsString:@"square_image_layout"]
-        || [description containsString:@"text_image_button_layout"]
-        || [description containsString:@"text_search_ad"]
-        || [description containsString:@"expandable_list"]
-        || [description containsString:@"expandable_metadata"]
-        || [description containsString:@"video_display_full_layout"]
-        || [description containsString:@"video_display_full_buttoned_layout"])
+NSString *getAdString(NSString *description) {
+    if ([description containsString:@"brand_promo"])
+        return @"brand_promo";
+    if ([description containsString:@"carousel_footered_layout"])
+        return @"carousel_footered_layout";
+    if ([description containsString:@"carousel_headered_layout"])
+        return @"carousel_headered_layout";
+    if ([description containsString:@"feed_ad_metadata"])
+        return @"feed_ad_metadata";
+    if ([description containsString:@"full_width_portrait_image_layout"])
+        return @"full_width_portrait_image_layout";
+    if ([description containsString:@"full_width_square_image_layout"])
+        return @"full_width_square_image_layout";
+    if ([description containsString:@"landscape_image_wide_button_layout"])
+        return @"landscape_image_wide_button_layout";
+    if ([description containsString:@"post_shelf"])
+        return @"post_shelf";
+    if ([description containsString:@"product_carousel"])
+        return @"product_carousel";
+    if ([description containsString:@"product_engagement_panel"])
+        return @"product_engagement_panel";
+    if ([description containsString:@"product_item"])
+        return @"product_item";
+    if ([description containsString:@"statement_banner"])
+        return @"statement_banner";
+    if ([description containsString:@"square_image_layout"])
+        return @"square_image_layout";
+    if ([description containsString:@"text_image_button_layout"])
+        return @"text_image_button_layout";
+    if ([description containsString:@"text_search_ad"])
+        return @"text_search_ad";
+    if ([description containsString:@"video_display_full_layout"])
+        return @"video_display_full_layout";
+    if ([description containsString:@"video_display_full_buttoned_layout"])
+        return @"video_display_full_buttoned_layout";
+    return nil;
+}
+static BOOL isAdRenderer(YTIElementRenderer *elementRenderer, int kind) {
+    if ([elementRenderer respondsToSelector:@selector(hasCompatibilityOptions)] && elementRenderer.hasCompatibilityOptions && elementRenderer.compatibilityOptions.hasAdLoggingData) {
+        HBLogDebug(@"YTX adLogging %d %@", kind, elementRenderer);
         return YES;
+    }
+    NSString *description = [elementRenderer description];
+    NSString *adString = getAdString(description);
+    if (adString) {
+        HBLogDebug(@"YTX getAdString %d %@ %@", kind, adString, elementRenderer);
+        return YES;
+    }
     return NO;
 }
-#define cellDividerDataBytesLength 720
-static __strong NSData *cellDividerData;
-static uint8_t cellDividerDataBytes[] = {
-    0xa, 0x8d, 0x5, 0xca, 0xeb, 0xea, 0x83, 0x5, 0x86, 0x5,
-    0x1a, 0x29, 0x92, 0xcb, 0xa1, 0x90, 0x5, 0x23, 0xa, 0x21,
-    0x63, 0x65, 0x6c, 0x6c, 0x5f, 0x64, 0x69, 0x76, 0x69, 0x64,
-    0x65, 0x72, 0x2e, 0x65, 0x6d, 0x6c, 0x7c, 0x39, 0x33, 0x62,
-    0x65, 0x63, 0x30, 0x39, 0x37, 0x37, 0x63, 0x66, 0x64, 0x33,
-    0x61, 0x31, 0x37, 0x2a, 0xef, 0x3, 0xea, 0x84, 0xef, 0xab,
-    0xa, 0xe8, 0x3, 0x8, 0x3, 0x12, 0x0, 0x2d, 0x0, 0x0,
-    0x0, 0x41, 0x32, 0xdc, 0x3, 0xfa, 0x3e, 0x4, 0x8, 0x5,
-    0x10, 0x1, 0x92, 0x3f, 0x4, 0xa, 0x2, 0x8, 0x1, 0xc2,
-    0xb8, 0x89, 0xbe, 0xa, 0x86, 0x1, 0xa, 0x81, 0x1, 0x38,
-    0x1, 0x40, 0x1, 0x50, 0x1, 0x58, 0x1, 0x60, 0x5, 0x78,
-    0x1, 0x80, 0x1, 0x1, 0x90, 0x1, 0x1, 0x98, 0x1, 0x1,
-    0xa0, 0x1, 0x1, 0xa8, 0x1, 0x1, 0xe0, 0x1, 0x1, 0x88,
-    0x2, 0x1, 0xa0, 0x2, 0x1, 0xd0, 0x2, 0x1, 0x98, 0x3,
-    0x1, 0xa0, 0x3, 0x1, 0xb0, 0x3, 0x1, 0xd0, 0x3, 0x1,
-    0xd8, 0x3, 0x1, 0xe8, 0x3, 0x1, 0xf0, 0x3, 0x1, 0x98,
-    0x4, 0x1, 0xd0, 0x4, 0x1, 0xe8, 0x4, 0x1, 0xf0, 0x4,
-    0x1, 0xf8, 0x4, 0x1, 0xd8, 0x5, 0x1, 0xe5, 0x5, 0xcd,
-    0xcc, 0x4c, 0x3f, 0xed, 0x5, 0xcd, 0xcc, 0x4c, 0x3f, 0xf5,
-};
-%hook YTIElementRenderer
-- (NSData *)elementData {
-    // NSString *description = [self description];
-    if ([self respondsToSelector:@selector(hasCompatibilityOptions)] && self.hasCompatibilityOptions && self.compatibilityOptions.hasAdLoggingData) return cellDividerData;
-    return %orig;
+static NSMutableArray <YTIItemSectionRenderer *> *filteredArray(NSArray <YTIItemSectionRenderer *> *array) {
+    NSMutableArray <YTIItemSectionRenderer *> *newArray = [array mutableCopy];
+    NSIndexSet *removeIndexes = [newArray indexesOfObjectsPassingTest:^BOOL(YTIItemSectionRenderer *sectionRenderer, NSUInteger idx, BOOL *stop) {
+        if (![sectionRenderer isKindOfClass:%c(YTIItemSectionRenderer)])
+            return NO;
+        NSMutableArray <YTIItemSectionSupportedRenderers *> *contentsArray = sectionRenderer.contentsArray;
+        if (contentsArray.count > 1) {
+            NSIndexSet *removeContentsArrayIndexes = [contentsArray indexesOfObjectsPassingTest:^BOOL(YTIItemSectionSupportedRenderers *sectionSupportedRenderers, NSUInteger idx2, BOOL *stop2) {
+                YTIElementRenderer *elementRenderer = sectionSupportedRenderers.elementRenderer;
+                return isAdRenderer(elementRenderer, 3);
+            }];
+            [contentsArray removeObjectsAtIndexes:removeContentsArrayIndexes];
+        }
+        YTIItemSectionSupportedRenderers *firstObject = [contentsArray firstObject];
+        YTIElementRenderer *elementRenderer = firstObject.elementRenderer;
+        return isAdRenderer(elementRenderer, 2);
+    }];
+    [newArray removeObjectsAtIndexes:removeIndexes];
+    return newArray;
 }
-%end
 %hook YTInnerTubeCollectionViewController
-- (void)loadWithModel:(YTISectionListRenderer *)model {
-    if ([model isKindOfClass:%c(YTISectionListRenderer)]) {
-        NSMutableArray <YTISectionListSupportedRenderers *> *contentsArray = model.contentsArray;
-        NSIndexSet *removeIndexes = [contentsArray indexesOfObjectsPassingTest:^BOOL(YTISectionListSupportedRenderers *renderers, NSUInteger idx, BOOL *stop) {
-            if (![renderers isKindOfClass:%c(YTISectionListSupportedRenderers)])
-                return NO;
-            YTIItemSectionRenderer *sectionRenderer = renderers.itemSectionRenderer;
-            YTIItemSectionSupportedRenderers *firstObject = [sectionRenderer.contentsArray firstObject];
-            YTIElementRenderer *elementRenderer = firstObject.elementRenderer;
-            NSString *description = [elementRenderer description];
-            return isAdString(description);
-        }];
-        [contentsArray removeObjectsAtIndexes:removeIndexes];
-    }
+- (void)displaySectionsWithReloadingSectionControllerByRenderer:(id)renderer {
+    NSMutableArray *sectionRenderers = [self valueForKey:@"_sectionRenderers"];
+    [self setValue:filteredArray(sectionRenderers) forKey:@"_sectionRenderers"];
     %orig;
 }
-%end
-%hook YTWatchNextResultsViewController
-- (void)loadWithModel:(YTISectionListRenderer *)watchNextResults {
-    if ([watchNextResults isKindOfClass:%c(YTISectionListRenderer)]) {
-        NSMutableArray <YTISectionListSupportedRenderers *> *contentsArray = watchNextResults.contentsArray;
-        NSIndexSet *removeIndexes = [contentsArray indexesOfObjectsPassingTest:^BOOL(YTISectionListSupportedRenderers *renderers, NSUInteger idx, BOOL *stop) {
-            if (![renderers isKindOfClass:%c(YTISectionListSupportedRenderers)])
-                return NO;
-            YTIItemSectionRenderer *sectionRenderer = renderers.itemSectionRenderer;
-            YTIItemSectionSupportedRenderers *firstObject = [sectionRenderer.contentsArray firstObject];
-            YTIElementRenderer *elementRenderer = firstObject.elementRenderer;
-            NSString *description = [elementRenderer description];
-            return isAdString(description);
-        }];
-        [contentsArray removeObjectsAtIndexes:removeIndexes];
-    }
-    %orig;
-}
-%end
-%hook _ASDisplayView
-- (void)didMoveToWindow {
-    %orig();
-    if ([self.accessibilityIdentifier isEqualToString:@"id.products_in_video_with_preview_overlay_badge.view"]) self.hidden = YES; 
+- (void)addSectionsFromArray:(NSArray <YTIItemSectionRenderer *> *)array {
+    %orig(filteredArray(array));
 }
 %end
 %end
@@ -245,34 +259,25 @@ static uint8_t cellDividerDataBytes[] = {
 %end
 %end
 
-%group gCenterYouTubeLogo
+// Center YouTube Logo - @arichornlover
+%group gCenterYouTubeLogo 
 %hook YTNavigationBarTitleView
 - (void)setShouldCenterNavBarTitleView:(BOOL)center {
-    %orig(YES);
+    %orig(center);
+    if (center) {
+        [self alignCustomViewToCenterOfWindow];
+    }
 }
 - (BOOL)shouldCenterNavBarTitleView {
     return YES;
 }
+%new;
 - (void)alignCustomViewToCenterOfWindow {
+    CGRect frame = self.customView.frame;
+    frame.origin.x = (self.window.frame.size.width - frame.size.width) / 2;
+    self.customView.frame = frame;
 }
 %end
-%end
-
-// Fix App Group Directory by move it to document directory
-%hook NSFileManager
-- (NSURL *)containerURLForSecurityApplicationGroupIdentifier:(NSString *)groupIdentifier {
-    if (groupIdentifier != nil) {
-        NSArray *paths = [[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask];
-        NSURL *documentsURL = [paths lastObject];
-        return [documentsURL URLByAppendingPathComponent:@"AppGroup"];
-    }
-    return %orig(groupIdentifier);
-}
-%end
-
-// Remove App Rating Prompt in YouTube (for Sideloaded - iOS 14+) - @arichornlover
-%hook SKStoreReviewController
-+ (void)requestReview { }
 %end
 
 // YTMiniPlayerEnabler: https://github.com/level3tjg/YTMiniplayerEnabler/
@@ -676,15 +681,29 @@ static int contrastMode() {
 - (BOOL)cxClientEnableModernizedActionSheet { return NO; }
 - (BOOL)enableClientShortsSheetsModernization { return NO; }
 - (BOOL)enableTimestampModernizationForNative { return NO; }
-- (BOOL)modernizeElementsTextColor { return NO; }
-- (BOOL)modernizeElementsBgColor { return NO; }
+- (BOOL)mainAppCoreClientEnableModernIaFeedStretchBottom { return NO; }
+- (BOOL)mainAppCoreClientEnableModernIaFrostedBottomBar { return NO; }
+- (BOOL)mainAppCoreClientEnableModernIaFrostedPivotBar { return NO; }
+- (BOOL)mainAppCoreClientEnableModernIaFrostedPivotBarUpdatedBackdrop { return NO; }
+- (BOOL)mainAppCoreClientEnableModernIaFrostedTopBar { return NO; }
+- (BOOL)mainAppCoreClientEnableModernIaOpacityPivotBar { return NO; }
+- (BOOL)mainAppCoreClientEnableModernIaTopAndBottomBarIconRefresh { return NO; }
+- (BOOL)mainAppCoreClientEnableModernizedBedtimeReminderU18DefaultSettings { return NO; }
+- (BOOL)modernizeCameoNavbar { return NO; }
 - (BOOL)modernizeCollectionLockups { return NO; }
+- (BOOL)modernizeCollectionLockupsShowVideoCount { return NO; }
+- (BOOL)modernizeElementsBgColor { return NO; }
+- (BOOL)modernizeElementsTextColor { return NO; }
+- (BOOL)postsCreatorClientEnableModernButtonsUi { return NO; }
+- (BOOL)pullToFullModernEdu { return NO; }
+- (BOOL)showModernMiniplayerRedesign { return NO; }
 - (BOOL)uiSystemsClientGlobalConfigEnableModernButtonsForNative { return NO; }
 - (BOOL)uiSystemsClientGlobalConfigIosEnableModernTabsForNative { return NO; }
-- (BOOL)uiSystemsClientGlobalConfigIosEnableEpUxUpdates { return NO; }
-- (BOOL)uiSystemsClientGlobalConfigIosEnableSheetsUxUpdates { return NO; }
 - (BOOL)uiSystemsClientGlobalConfigIosEnableSnackbarModernization { return NO; }
+- (BOOL)uiSystemsClientGlobalConfigModernizeNativeBgColor { return NO; }
+- (BOOL)uiSystemsClientGlobalConfigModernizeNativeTextColor { return NO; }
 // Disable Rounded Content
+- (BOOL)enableIosFloatingMiniplayerRoundedCornerRadius { return YES; }
 - (BOOL)iosDownloadsPageRoundedThumbs { return NO; }
 - (BOOL)iosRoundedSearchBarSuggestZeroPadding { return NO; }
 - (BOOL)uiSystemsClientGlobalConfigEnableRoundedDialogForNative { return NO; }
@@ -764,7 +783,7 @@ static int contrastMode() {
 %end
 
 // YTTapToSeek - https://github.com/bhackel/YTTapToSeek
-%group YTTTS_Tweak
+%group gYTTapToSeek
     %hook YTInlinePlayerBarContainerView
     - (void)didPressScrubber:(id)arg1 {
         %orig;
@@ -845,6 +864,17 @@ static int contrastMode() {
 %hook YTWatchViewController
 - (unsigned long long)allowedFullScreenOrientations {
     return UIInterfaceOrientationMaskAllButUpsideDown;
+}
+%end
+%end
+
+// Fullscreen to the Right (iPhone-exclusive) - @arichornlover & @bhackel
+// WARNING: Please turn off the “Portrait Fullscreen” and "iPad Layout" Options while the option "Fullscreen to the Right" is enabled below.
+%group gFullscreenToTheRight
+%hook YTWatchViewController
+- (UIInterfaceOrientationMask)allowedFullScreenOrientations {
+    UIInterfaceOrientationMask orientations = UIInterfaceOrientationMaskLandscapeRight;
+    return orientations;
 }
 %end
 %end
@@ -966,7 +996,7 @@ static int contrastMode() {
 %hook YTWatchPullToFullController
 - (BOOL)shouldRecognizeOverscrollEventsFromWatchOverscrollController:(id)arg1 {
     // Get the current player orientation
-    YTWatchViewController *watchViewController = self.playerViewSource;
+    YTWatchViewController *watchViewController = (YTWatchViewController *)self.playerViewSource;
     NSUInteger allowedFullScreenOrientations = [watchViewController allowedFullScreenOrientations];
     // Check if the current player orientation is portrait
     if (allowedFullScreenOrientations == UIInterfaceOrientationMaskAllButUpsideDown
@@ -1037,8 +1067,9 @@ static int contrastMode() {
 }
 %end
 
+/*
 // LEGACY VERSION ⚠️
-// Hide Fullscreen Button - @arichornlover - PoomSmart's Newer Version of the *YouQuality* tweak breaks when enabling this
+// Hide Fullscreen Button - @arichornlover - PoomSmart's 1.2.0+ Versions of the *YouQuality* tweak makes the button invisible when enabling this
 %hook YTInlinePlayerBarContainerView
 - (void)layoutSubviews {
     %orig; 
@@ -1055,12 +1086,27 @@ static int contrastMode() {
     }
 }
 %end
+*/
 
 // NEW VERSION
 // Hide Fullscreen Button - @arichornlover
-// %hook YTInlinePlayerBarContainerView
-// ..Work-in-progres..
-// %end
+%group gHideFullscreenButton
+%hook YTInlinePlayerBarContainerView
+- (BOOL)fullscreenButtonDisabled { return YES; }
+- (BOOL)canShowFullscreenButton { return NO; }
+- (BOOL)canShowFullscreenButtonExperimental { return NO; }
+// - (void)setFullscreenButtonDisabled:(BOOL) // Might implement this if useful - @arichornlover
+- (void)layoutSubviews {
+    %orig;
+    if (self.exitFullscreenButton && !self.exitFullscreenButton.hidden) {
+        self.exitFullscreenButton.hidden = YES;
+    }
+    if (self.enterFullscreenButton && !self.enterFullscreenButton.hidden) {
+        self.enterFullscreenButton.hidden = YES;
+    }
+}
+%end
+%end
 
 // Hide HUD Messages
 %hook YTHUDMessageView
@@ -1075,7 +1121,6 @@ static int contrastMode() {
     return IS_ENABLED(@"hideChannelWatermark_enabled") ? NO : %orig;
 }
 %end
-// Hide Channel Watermark (for Backwards Compatibility)
 %hook YTAnnotationsViewController
 - (void)loadFeaturedChannelWatermark {
     if (IS_ENABLED(@"hideChannelWatermark_enabled")) {}
@@ -1127,7 +1172,7 @@ static int contrastMode() {
 %end
 %end
 
-// Hide Video Title (in Fullscreen) - @arichornlover
+// Hide Video Title when in Fullscreen - @arichornlover
 %hook YTMainAppControlsOverlayView
 - (BOOL)titleViewHidden {
     return IS_ENABLED(@"hideVideoTitle_enabled") ? YES : %orig;
@@ -1325,7 +1370,7 @@ static int contrastMode() {
 static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *identifiers) {
     for (id child in [nodeController children]) {
         if ([child isKindOfClass:%c(ELMNodeController)]) {
-            NSArray <ELMComponent *> *elmChildren = [(ELMNodeController *)child children];
+            NSArray <ELMComponent *> *elmChildren = [(ELMNodeController  * _Nullable)child children];
             for (ELMComponent *elmChild in elmChildren) {
                 for (NSString *identifier in identifiers) {
                     if ([[elmChild description] containsString:identifier])
@@ -1335,8 +1380,8 @@ static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *ide
         }
 
         if ([child isKindOfClass:%c(ASNodeController)]) {
-            ASDisplayNode *childNode = ((ASNodeController *)child).node; // ELMContainerNode
-            NSArray *yogaChildren = childNode.yogaChildren;
+            ASDisplayNode *childNode = ((ASNodeController  * _Nullable)child).node; // ELMContainerNode
+            NSArray<id> *yogaChildren = childNode.yogaChildren;
             for (ASDisplayNode *displayNode in yogaChildren) {
                 if ([identifiers containsObject:displayNode.accessibilityIdentifier])
                     return YES;
@@ -1352,7 +1397,7 @@ static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *ide
 
 %hook ASCollectionView // This stopped working on May 14th 2024 due to a Server-Side Change from YouTube.
 
-- (CGSize)sizeForElement:(ASCollectionElement *)element {
+- (CGSize)sizeForElement:(ASCollectionElement  * _Nullable)element {
     if ([self.accessibilityIdentifier isEqualToString:@"id.video.scrollable_action_bar"]) {
         ASCellNode *node = [element node];
         ASNodeController *nodeController = [node controller];
@@ -1542,7 +1587,7 @@ static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *ide
 // Remove “Play next in queue” from the menu (@PoomSmart) - qnblackcat/uYouPlus#1138
 %hook YTMenuItemVisibilityHandler
 - (BOOL)shouldShowServiceItemRenderer:(YTIMenuConditionalServiceItemRenderer *)renderer {
-    return IS_ENABLED(@"hidePlayNextInQueue_enabled") && renderer.icon.iconType == 251 ? NO : %orig;
+    return IS_ENABLED(@"hidePlayNextInQueue_enabled") && renderer.icon.iconType == 251 && renderer.secondaryIcon.iconType == 741 ? NO : %orig;
 }
 %end
 
@@ -1561,7 +1606,7 @@ static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *ide
 %end
 %end
 
-// Hide Videos in Fullscreen - @arichornlover
+// Hide Videos when in Fullscreen - @arichornlover
 %group gNoVideosInFullscreen
 %hook YTFullScreenEngagementOverlayView
 - (void)setRelatedVideosView:(id)view {
@@ -1585,9 +1630,9 @@ static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *ide
 // iPhone Layout - @LillieH1000 & @arichornlover
 %group giPhoneLayout
 %hook UIDevice
-- (long long)userInterfaceIdiom {
-    return NO;
-} 
+- (UIUserInterfaceIdiom)userInterfaceIdiom {
+    return UIUserInterfaceIdiomPhone;
+}
 %end
 %hook UIStatusBarStyleAttributes
 - (long long)idiom {
@@ -1596,12 +1641,20 @@ static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *ide
 %end
 %hook UIKBTree
 - (long long)nativeIdiom {
-    return YES;
+    if ([UIApplication sharedApplication].statusBarOrientation == UIInterfaceOrientationPortrait) {
+        return NO;
+    } else {
+        return YES;
+    }
 } 
 %end
 %hook UIKBRenderer
 - (long long)assetIdiom {
-    return NO;
+    if ([UIApplication sharedApplication].statusBarOrientation == UIInterfaceOrientationPortrait) {
+        return NO;
+    } else {
+        return YES;
+    }
 } 
 %end
 %end
@@ -1632,8 +1685,6 @@ static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *ide
 %ctor {
     // Load uYou first so its functions are available for hooks.
     // dlopen([[NSString stringWithFormat:@"%@/Frameworks/uYou.dylib", [[NSBundle mainBundle] bundlePath]] UTF8String], RTLD_LAZY);
-
-    cellDividerData = [NSData dataWithBytes:cellDividerDataBytes length:cellDividerDataBytesLength];
 
     %init;
     if (IS_ENABLED(@"hideYouTubeLogo_enabled")) {
@@ -1668,6 +1719,12 @@ static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *ide
     }
     if (IS_ENABLED(@"portraitFullscreen_enabled")) {
         %init(gPortraitFullscreen);
+    }
+    if (IS_ENABLED(@"fullscreenToTheRight_enabled")) {
+        %init(gFullscreenToTheRight);
+    }
+    if (IS_ENABLED(@"disableFullscreenButton_enabled")) {
+        %init(gHideFullscreenButton);
     }
     if (IS_ENABLED(@"hideFullscreenActions_enabled")) {
         %init(hideFullscreenActions);
@@ -1733,7 +1790,7 @@ static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *ide
         %init(gDisableLiveChatSection);
     }
     if (IS_ENABLED(@"YTTapToSeek_enabled")) {
-        %init(YTTTS_Tweak);
+        %init(gYTTapToSeek);
     }
     if (IS_ENABLED(@"hidePremiumPromos_enabled")) {
         %init(gHidePremiumPromos);
