@@ -18,7 +18,7 @@ on:
         type: string
       decrypted_youtube_url:
         description: "Direct URL of the decrypted YouTube IPA"
-        default: "https://www.dropbox.com/scl/fi/6nkeave5wzymd2niqwqkd/com.google.ios.youtube-19.21.2-Decrypted.ipa?rlkey=jnri5v27chx9ixk5bhjsrb0ky&st=ket86ll9&dl=1"
+        default: "https://www.dropbox.com/scl/fi/z3w2d422iocpqjuqvjnz6/com.google.ios.youtube-19.22.6-Decrypted.ipa?rlkey=yelrirfxiekzqvf0j8se8ldmi&st=cwapw6n9&dl=1"
         required: true
         type: string
       bundle_id:
